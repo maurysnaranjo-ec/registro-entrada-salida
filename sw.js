@@ -1,6 +1,6 @@
 /* Service worker: permite instalar la app y abrirla rápido.
    Si publica cambios, suba el número de VERSION para que los dispositivos se actualicen. */
-const VERSION = 'ingresos-v1';
+const VERSION = 'ingresos-v2';
 const ARCHIVOS = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

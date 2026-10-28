@@ -54,6 +54,14 @@ window.APP_CONFIG = {
 3. **👥 Personal:** importe los funcionarios desde Excel o CSV (Nombre, Cédula, Cargo).
 4. **⛔ No autorizados:** registre a las personas que no pueden ingresar.
 
+## Salidas de funcionarios y avisos
+
+- El **administrador autoriza** la salida (pestaña *Funcionarios > Autorizar salida*): fecha, hora desde / hasta, motivo y si retorna.
+- El **operador solo verifica**: busca al funcionario y toca **Verificar y registrar SALIDA**. El sistema comprueba en el servidor que la autorización esté vigente a esa hora; si no, no deja registrar.
+- Si un funcionario necesita salir y no tiene autorización, el operador toca **Solicitar autorización al administrador**; el administrador la recibe como aviso y la **autoriza o niega**.
+- Cualquier operador puede enviar un **aviso** al administrador con el botón 🔔 de la barra superior. El administrador ve el número de avisos pendientes, y la app suena, vibra y muestra una notificación cuando llega uno nuevo (mientras la app esté abierta).
+- Para recibir los avisos **también por correo**, escriba el correo en `ADMIN_EMAIL` al inicio del Apps Script (la primera vez Google pedirá permiso para enviar correos).
+
 ## Actualizar la app después
 
 Cuando cambie archivos en GitHub, suba el número de `VERSION` en `sw.js` (por ejemplo `ingresos-v2`) para que los dispositivos descarguen la versión nueva.

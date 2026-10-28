@@ -11,12 +11,22 @@
    y retornos · admin además administra: historial, ediciones, lista de
    no autorizados, personal, operadores y año lectivo.
    El administrador crea más operadores desde la pestaña «Ajustes».
+   Salidas de funcionarios: el ADMINISTRADOR autoriza (fecha y horas); el
+   operador solo verifica la autorización y registra la salida. El operador
+   puede enviar avisos al administrador (y, si pone ADMIN_EMAIL, también
+   llegan por correo).
    ============================================================ */
 var USUARIOS = {
   'admin':      {clave:'Chiriboga2026',  rol:'admin'},
   'inspeccion': {clave:'Inspeccion2026', rol:'operador'}
 };
 var TZ = 'America/Guayaquil';
+var ADMIN_EMAIL = '';   // opcional: correo del administrador para recibir los avisos (déjelo vacío para desactivar)
+var HOJA_A = 'Autorizaciones', HOJA_NT = 'Notificaciones';
+var K_A = ['id','fecha','nombre','cedula','cargo','motivo','detalle','desde','hasta','retorna','retornoPrevisto','autorizadoPor','estado','obs','solicitadoPor','salidaId'];
+var T_A = ['ID','Fecha','Funcionario','Cédula','Cargo o área','Motivo','Detalle','Hora desde','Hora hasta','Retorna','Hora prevista de retorno','Autorizado por','Estado','Observación','Solicitado por','ID de salida'];
+var K_NT = ['id','fecha','hora','de','tipo','mensaje','ref','estado','atendidaPor','respuesta'];
+var T_NT = ['ID','Fecha','Hora','De','Tipo','Mensaje','Referencia','Estado','Atendida por','Respuesta'];
 var HOJA_O = 'Operadores', HOJA_PF = 'Personal', HOJA_C = 'Config';
 var K_O = ['id','nombre','cedula','usuario','hash','salt','activo','creado'];
 var T_O = ['ID','Nombre completo','Cédula','Usuario','Contraseña (cifrada)','Sal','Activo','Fecha de creación'];
@@ -73,7 +83,13 @@ function manejar_(d){
   if (a === 'login') return {ok:true, rol:rol, nombre:au.nombre};
 
   if (a === 'listar'){
-    return {ok:true, rol:rol, nombre:au.nombre, hoy:hoy, config:cfg_(),
+    return {ok:true, rol:rol, nombre:au.nombre, hoy:hoy, ahora:ahora_(), config:cfg_(),
+      autorizaciones: quitar_(leer_(HOJA_A,K_A,T_A).filter(function(r){
+        if (r.estado === 'Anulada' || r.estado === 'Utilizada') return false;
+        if (r.fecha === hoy) return true;
+        return rol === 'admin' && (r.estado === 'Solicitada' || (r.estado === 'Autorizada' && r.fecha > hoy));
+      })),
+      notifs: notifs_(au, rol),
       visitas: quitar_(leer_(HOJA_V,K_V,T_V).filter(function(r){ return r.fecha===hoy || r.estado==='Dentro'; })),
       funcionarios: quitar_(leer_(HOJA_F,K_F,T_F).filter(function(r){ return r.fecha===hoy || r.estado==='Fuera'; }))};
   }
@@ -154,6 +170,7 @@ function manejar_(d){
 
   /* ---------- Funcionarios ---------- */
   if (a === 'salidaFuncionario'){
+    if (rol !== 'admin') throw new Error('Solo el administrador puede autorizar una salida. Verifique la autorización del funcionario o solicítela.');
     var fn = String(d.nombre||'').trim();
     if (!fn) throw new Error('Escriba el nombre del funcionario.');
     if (!String(d.motivo||'').trim()) throw new Error('Seleccione el motivo de la salida.');
@@ -183,6 +200,41 @@ function manejar_(d){
     guardar_(HOJA_F,K_F,T_F,g); return {ok:true};
   }
 
+  if (a === 'notificar'){
+    var msg = String(d.mensaje||'').trim();
+    if (!msg) throw new Error('Escriba el mensaje.');
+    var tp = String(d.tipo||'Aviso').trim();
+    agregar_(HOJA_NT,K_NT,T_NT,{id:id_(), fecha:hoy, hora:ahora_(), de:au.nombre, tipo:tp, mensaje:msg, ref:'', estado:'Pendiente', atendidaPor:'', respuesta:''});
+    mailAdmin_('Aviso de ' + au.nombre + ' · ' + tp, msg + '\n\n' + fecha_(hoy) + ' ' + ahora_());
+    return {ok:true};
+  }
+  if (a === 'autSolicitar'){      // el operador pide autorización al administrador
+    var sn = String(d.nombre||'').trim();
+    if (!sn) throw new Error('Escriba el nombre del funcionario.');
+    if (!String(d.motivo||'').trim()) throw new Error('Seleccione el motivo.');
+    if (d.motivo === 'Otro' && !String(d.detalle||'').trim()) throw new Error('Describa el motivo.');
+    var aid = id_(), TS = function(v){ return String(v||'').trim(); };
+    agregar_(HOJA_A,K_A,T_A,{id:aid, fecha:hoy, nombre:sn, cedula:TS(d.cedula), cargo:TS(d.cargo), motivo:d.motivo, detalle:TS(d.detalle), desde:ahora_(), hasta:'', retorna:'Sí', retornoPrevisto:'', autorizadoPor:'', estado:'Solicitada', obs:'', solicitadoPor:au.nombre, salidaId:''});
+    var txt = 'Solicita autorización de salida: ' + sn + ' (' + d.motivo + (TS(d.detalle) ? ' – ' + TS(d.detalle) : '') + ')';
+    agregar_(HOJA_NT,K_NT,T_NT,{id:id_(), fecha:hoy, hora:ahora_(), de:au.nombre, tipo:'Solicitud de salida', mensaje:txt, ref:aid, estado:'Pendiente', atendidaPor:'', respuesta:''});
+    mailAdmin_('Solicitud de salida · ' + sn, txt + '\nSolicitado por ' + au.nombre + ' a las ' + ahora_());
+    return {ok:true};
+  }
+  if (a === 'salidaAutorizada'){  // el operador solo VERIFICA la autorización y registra la salida
+    var ax = buscar_(HOJA_A,K_A,T_A,d.id), ar = ax.reg;
+    var er = verificarAut_(ar, hoy);
+    if (er) throw new Error('⛔ ' + er);
+    var ya = leer_(HOJA_F,K_F,T_F).some(function(r){ return r.estado==='Fuera' && clave_(r.nombre)===clave_(ar.nombre); });
+    if (ya) throw new Error('Este funcionario ya consta como fuera de la institución. Registre su retorno.');
+    var rt = ar.retorna === 'No' ? 'No' : 'Sí', sid = id_();
+    agregar_(HOJA_F,K_F,T_F,{id:sid, fecha:hoy, nombre:ar.nombre, cargo:ar.cargo, cedula:ar.cedula, motivo:ar.motivo, detalle:ar.detalle,
+      salida:ahora_(), retornoPrevisto:rt==='Sí'?ar.retornoPrevisto:'', autoriza:ar.autorizadoPor, retorno:'',
+      estado:rt==='Sí'?'Fuera':'No retorna', obs:rt==='No'?(ar.obs||'No retorna'):'', registradoPor:au.nombre});
+    ar.estado = 'Utilizada'; ar.salidaId = sid;
+    guardar_(HOJA_A,K_A,T_A,ax);
+    return {ok:true};
+  }
+
   /* ---------- Solo administrador ---------- */
   if (rol !== 'admin') throw new Error('Solo el administrador puede realizar esta acción.');
   if (a === 'historial'){
@@ -195,6 +247,39 @@ function manejar_(d){
     });
     return {ok:true, registros:quitar_(lista)};
   }
+  if (a === 'notifAtender'){
+    var nx = buscar_(HOJA_NT,K_NT,T_NT,d.id);
+    nx.reg.estado = 'Atendida'; nx.reg.atendidaPor = au.nombre; nx.reg.respuesta = String(d.respuesta||'').trim();
+    guardar_(HOJA_NT,K_NT,T_NT,nx); return {ok:true};
+  }
+  if (a === 'autCrear'){
+    var cn = String(d.nombre||'').trim();
+    if (!cn) throw new Error('Escriba el nombre del funcionario.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(d.fecha||'')) || d.fecha < hoy) throw new Error('La fecha no es válida (no puede ser anterior a hoy).');
+    var nuevo = {id:id_(), fecha:d.fecha, nombre:cn, cedula:String(d.cedula||'').trim(), cargo:String(d.cargo||'').trim(), motivo:String(d.motivo||'').trim(),
+      detalle:String(d.detalle||'').trim(), solicitadoPor:'', salidaId:''};
+    validarAut_(d, nuevo); nuevo.autorizadoPor = au.nombre; nuevo.estado = 'Autorizada';
+    agregar_(HOJA_A,K_A,T_A,nuevo);
+    registrarPersonal_(cn, nuevo.cedula, nuevo.cargo);
+    return {ok:true};
+  }
+  if (a === 'autResolver'){
+    var rx = buscar_(HOJA_A,K_A,T_A,d.id), rr = rx.reg;
+    if (rr.estado !== 'Solicitada') throw new Error('Esta solicitud ya fue resuelta.');
+    if (d.decision === 'Negar'){ rr.estado = 'Negada'; rr.autorizadoPor = au.nombre; rr.obs = String(d.obs||'').trim(); }
+    else { validarAut_(d, rr); rr.autorizadoPor = au.nombre; rr.estado = 'Autorizada'; }
+    guardar_(HOJA_A,K_A,T_A,rx);
+    leer_(HOJA_NT,K_NT,T_NT).filter(function(n){ return n.ref === rr.id && n.estado === 'Pendiente'; }).forEach(function(n){
+      n.estado = 'Atendida'; n.atendidaPor = au.nombre; n.respuesta = rr.estado; guardar_(HOJA_NT,K_NT,T_NT,{_fila:n._fila, reg:n});
+    });
+    return {ok:true};
+  }
+  if (a === 'autAnular'){
+    var nxa = buscar_(HOJA_A,K_A,T_A,d.id);
+    if (nxa.reg.estado !== 'Autorizada') throw new Error('Solo se pueden anular autorizaciones vigentes.');
+    nxa.reg.estado = 'Anulada'; guardar_(HOJA_A,K_A,T_A,nxa); return {ok:true};
+  }
+
   if (a === 'configGuardar'){
     var et = String(d.etiqueta||'').trim(), ini = String(d.inicio||''), fin = String(d.fin||'');
     if (!et) throw new Error('Escriba el nombre del año lectivo (ej. 2026 – 2027).');
@@ -362,6 +447,42 @@ function upsertPersona_(p){
   if (p.celular) e.reg.celular = p.celular;
   e.reg.visitas = String((parseInt(ex.visitas,10)||0) + 1); e.reg.ultima = p.ultima;
   guardar_(HOJA_P,K_P,T_P,e);
+}
+function fecha_(i){ return String(i).split('-').reverse().join('/'); }
+function mailAdmin_(asunto, cuerpo){
+  if (!ADMIN_EMAIL) return;
+  try { MailApp.sendEmail(ADMIN_EMAIL, '[Control de ingresos] ' + asunto, cuerpo); } catch (e) {}
+}
+function notifs_(au, rol){
+  var l = leer_(HOJA_NT,K_NT,T_NT);
+  if (rol !== 'admin') l = l.filter(function(n){ return n.de === au.nombre; });
+  return quitar_(l.slice(-(rol === 'admin' ? 30 : 10)).reverse());
+}
+// Validaciones comunes de una autorización (fecha/horas/retorno). Copia los datos validados a "o".
+function validarAut_(d, o){
+  var hora = /^([01]\d|2[0-3]):[0-5]\d$/;
+  if (!String(o.motivo||d.motivo||'').trim()) throw new Error('Seleccione el motivo de la salida.');
+  if (d.motivo !== undefined) o.motivo = String(d.motivo).trim();
+  if (d.detalle !== undefined) o.detalle = String(d.detalle||'').trim();
+  if (o.motivo === 'Otro' && !String(o.detalle||'').trim()) throw new Error('Describa el motivo de la salida.');
+  if (d.fecha && !o.id) o.fecha = d.fecha;
+  var desde = String(d.desde||''), hasta = String(d.hasta||''), prev = String(d.retornoPrevisto||'');
+  if (!hora.test(desde)) throw new Error('Indique la hora desde la que puede salir (HH:MM).');
+  if (hasta && !hora.test(hasta)) throw new Error('Hora «hasta» no válida.');
+  if (hasta && hasta < desde) throw new Error('La hora «hasta» debe ser posterior a «desde».');
+  if (prev && !hora.test(prev)) throw new Error('Hora prevista de retorno no válida.');
+  var retorna = d.retorna === 'No' ? 'No' : 'Sí', obs = String(d.obs||'').trim();
+  if (retorna === 'No' && !obs) throw new Error('Indique por qué no retornará (ej. reposo médico).');
+  o.desde = desde; o.hasta = hasta; o.retorna = retorna; o.retornoPrevisto = retorna === 'Sí' ? prev : ''; o.obs = retorna === 'No' ? obs : '';
+}
+// Devuelve el motivo por el que NO puede salir ahora, o '' si la autorización está vigente
+function verificarAut_(ar, hoy){
+  if (ar.estado !== 'Autorizada') return 'Esta autorización no está vigente (estado: ' + ar.estado + ').';
+  if (ar.fecha !== hoy) return 'La autorización es para el ' + fecha_(ar.fecha) + '.';
+  var ahora = ahora_();
+  if (ahora < ar.desde) return 'Aún no puede salir: la autorización rige desde las ' + ar.desde + ' (ahora son las ' + ahora + ').';
+  if (ar.hasta && ahora > ar.hasta) return 'La autorización venció a las ' + ar.hasta + ' (ahora son las ' + ahora + '). Solicite una nueva al administrador.';
+  return '';
 }
 function registrarPersonal_(nom, ced, cargo){
   var ck = clave_(nom);

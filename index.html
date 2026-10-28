@@ -99,7 +99,8 @@ h2.t{font:700 13px Poppins,sans-serif;text-transform:uppercase;letter-spacing:.8
 <div class="topbar">
   <img id="logo" alt="Escudo">
   <div><h1>Unidad Educativa "Cap. Edmundo Chiriboga"</h1><p>Control de ingreso y salida de personas y funcionarios</p></div>
-  <span id="quien" style="margin-left:auto;font-size:12px;color:#cfe0f2" hidden></span>
+  <button class="tag" id="btnAv" hidden style="margin-left:auto">🔔 <span id="avT">Avisar</span></button>
+  <span id="quien" style="margin-left:10px;font-size:12px;color:#cfe0f2" hidden></span>
   <button class="tag" id="btnInst" hidden style="margin-left:8px">📲 Instalar</button>
   <button class="tag" id="btnSalir" hidden style="margin-left:8px">Salir</button>
 </div>
@@ -161,8 +162,30 @@ h2.t{font:700 13px Poppins,sans-serif;text-transform:uppercase;letter-spacing:.8
 
     <!-- ===== FUNCIONARIOS ===== -->
     <div id="pFun" class="cols" hidden>
+      <div>
       <div class="card">
-        <h2 class="t">Registrar salida de funcionario</h2>
+        <h2 class="t">Verificar autorización y registrar salida</h2>
+        <div class="hint" style="margin-bottom:10px">La salida de un funcionario la autoriza el administrador. Aquí se verifica que tenga autorización vigente a esta hora.</div>
+        <div class="field"><label>🔎 Funcionario (nombre o cédula)</label><input id="av_q" placeholder="Escriba para ver sus autorizaciones de hoy…" autocomplete="off"></div>
+        <div id="avList"></div>
+        <div class="estado-envio" id="av_msg"></div>
+        <div class="acc"><button type="button" id="av_sol">Solicitar autorización al administrador</button></div>
+      </div>
+      <div class="card soloAdmin">
+        <h2 class="t">Autorizar salida de funcionario</h2>
+        <div class="field"><label>🔎 Buscar funcionario registrado</label><input id="a_busca" placeholder="Nombre o cédula…" autocomplete="off"><div id="a_res" style="margin-top:6px"></div></div>
+        <div class="g2"><div class="field"><label>Nombre <span class="req">*</span></label><input id="a_nom"></div><div class="field"><label>Cargo o área</label><input id="a_cargo" list="dlCargos"></div></div>
+        <div class="g2"><div class="field"><label>Cédula</label><input id="a_ced" inputmode="numeric" maxlength="10"></div><div class="field"><label>Motivo <span class="req">*</span></label><select id="a_mot"><option>Cita médica</option><option>Calamidad doméstica</option><option>Reposo médico</option><option>Permiso personal</option><option>Comisión de servicios</option><option>Otro</option></select></div></div>
+        <div class="field"><label>Detalle <span style="font-weight:500;color:var(--muted)">(obligatorio si es «Otro»)</span></label><input id="a_det"></div>
+        <div class="g2"><div class="field"><label>Fecha</label><input type="date" id="a_fecha"></div><div class="field"><label>Puede salir desde <span class="req">*</span></label><input type="time" id="a_desde"></div>
+          <div class="field"><label>Hasta <span style="font-weight:500;color:var(--muted)">(opcional)</span></label><input type="time" id="a_hasta"></div><div class="field"><label>Hora prevista de retorno</label><input type="time" id="a_prev"></div></div>
+        <div class="field"><label>¿Retornará a la institución?</label><div class="radios" id="a_ret"><label class="ro activo"><input type="radio" name="aret" value="Sí" checked> Sí retorna</label><label class="ro"><input type="radio" name="aret" value="No"> No retorna</label></div></div>
+        <div class="box" id="a_obsBox" hidden><div class="field" style="margin:0"><label>¿Por qué no retorna? <span class="req">*</span></label><input id="a_obs" placeholder="Ej. Reposo médico"></div></div>
+        <div class="estado-envio" id="a_msg"></div>
+        <button class="btn" id="a_ok">Autorizar salida</button>
+      </div>
+      <div class="card soloAdmin">
+        <h2 class="t">Registrar salida directa (administrador)</h2>
         <div class="field"><label>🔎 Buscar funcionario registrado (nombre o cédula)</label><input id="f_busca" placeholder="Escriba y toque al funcionario…" autocomplete="off"><div id="f_res" style="margin-top:6px"></div></div>
         <div class="g2">
           <div class="field"><label>Nombre del funcionario <span class="req">*</span></label><input id="f_nom"></div>
@@ -183,7 +206,9 @@ h2.t{font:700 13px Poppins,sans-serif;text-transform:uppercase;letter-spacing:.8
         <div class="estado-envio" id="f_msg"></div>
         <button class="btn" id="f_ok">Registrar SALIDA</button>
       </div>
+      </div>
       <div>
+      <div class="card soloAdmin"><h2 class="t"><span>Solicitudes y autorizaciones</span><span class="cnt" id="auN">0</span></h2><div id="auList"></div></div>
       <div class="card"><h2 class="t"><span>Funcionarios fuera de la institución</span><span class="cnt" id="fN">0</span></h2><div id="fFuera"></div></div>
       <div class="card"><h2 class="t"><span>Movimientos de hoy</span><span class="cnt" id="fHN">0</span></h2><div id="fHoy"></div></div>
       </div>
@@ -278,6 +303,31 @@ h2.t{font:700 13px Poppins,sans-serif;text-transform:uppercase;letter-spacing:.8
   <div class="field"><label>Observación</label><input id="nr_o" placeholder="Opcional"></div>
   <div class="estado-envio" id="nr_err"></div>
   <div class="acc" style="justify-content:flex-end"><button id="nr_x">Cancelar</button><button class="ok" id="nr_ok">Guardar</button></div></div></div>
+<!-- Solicitar autorización -->
+<div class="fondo" id="mSol" hidden><div class="modal"><h3>Solicitar autorización de salida</h3>
+  <div class="field"><label>Funcionario <span class="req">*</span></label><input id="s_nom"></div>
+  <div class="g2"><div class="field"><label>Cédula</label><input id="s_ced" inputmode="numeric" maxlength="10"></div><div class="field"><label>Cargo o área</label><input id="s_cargo" list="dlCargos"></div></div>
+  <div class="field"><label>Motivo <span class="req">*</span></label><select id="s_mot"><option>Cita médica</option><option>Calamidad doméstica</option><option>Reposo médico</option><option>Permiso personal</option><option>Comisión de servicios</option><option>Otro</option></select></div>
+  <div class="field"><label>Detalle <span style="font-weight:500;color:var(--muted)">(obligatorio si es «Otro»)</span></label><input id="s_det"></div>
+  <div class="estado-envio" id="s_err"></div>
+  <div class="acc" style="justify-content:flex-end"><button id="s_x">Cancelar</button><button class="ok" id="s_ok">Enviar solicitud</button></div></div></div>
+<!-- Resolver solicitud (administrador) -->
+<div class="fondo" id="mRes" hidden><div class="modal"><h3>Autorizar salida</h3>
+  <div class="hint" id="r_info" style="font-size:13px;margin-bottom:12px"></div>
+  <div class="g2"><div class="field"><label>Puede salir desde <span class="req">*</span></label><input type="time" id="r_desde"></div><div class="field"><label>Hasta (opcional)</label><input type="time" id="r_hasta"></div></div>
+  <div class="field"><label>Hora prevista de retorno</label><input type="time" id="r_prev"></div>
+  <div class="field"><label>¿Retornará a la institución?</label><div class="radios" id="r_ret"><label class="ro activo"><input type="radio" name="rret" value="Sí" checked> Sí retorna</label><label class="ro"><input type="radio" name="rret" value="No"> No retorna</label></div></div>
+  <div class="field"><label>Observación <span style="font-weight:500;color:var(--muted)">(obligatoria si no retorna)</span></label><input id="r_obs"></div>
+  <div class="estado-envio" id="r_err"></div>
+  <div class="acc" style="justify-content:flex-end"><button id="r_x">Cerrar</button><button class="del" id="r_neg">Negar</button><button class="ok" id="r_ok">Autorizar</button></div></div></div>
+<!-- Avisos -->
+<div class="fondo" id="mAv" hidden><div class="modal" style="max-width:560px"><h3 id="av_t">Avisos</h3>
+  <div id="av_op"><div class="field"><label>Tipo de aviso</label><select id="avn_tipo"><option>Solicitud urgente</option><option>Novedad</option><option>Incidente</option><option>Otro</option></select></div>
+    <div class="field"><label>Mensaje <span class="req">*</span></label><textarea id="avn_msg" placeholder="Describa brevemente lo que necesita comunicar al administrador"></textarea></div>
+    <div class="estado-envio" id="avn_err"></div><button class="btn" id="avn_ok" type="button">Enviar aviso al administrador</button></div>
+  <div id="av_adm" hidden><button type="button" class="mini" id="av_perm">🔔 Activar avisos del navegador</button><div class="hint" style="margin:6px 0 10px">Los avisos del navegador funcionan mientras la app esté abierta. Para recibirlos con la app cerrada configure el correo (ADMIN_EMAIL) en el Apps Script.</div></div>
+  <h2 class="t" style="margin-top:16px"><span id="av_lt">Mis avisos</span></h2><div id="avList2"></div>
+  <div class="acc" style="justify-content:flex-end;margin-top:10px"><button id="avc_x">Cerrar</button></div></div></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -290,7 +340,7 @@ const CURSOS=[['Inicial 3 años',1],['Inicial 4 años',4],['1ro EGB',6],['2do EG
 const $=s=>document.querySelector(s);
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=i=>String(i).split('-').reverse().join('/');
-const S={cfg:{etiqueta:'',inicio:'',fin:''},nombre:'',u:null,rol:null,hoy:'',v:[],f:[],tipo:TIPOS[0][0],hist:[],hmod:'visitas',nr:null};
+const S={aut:[],notifs:[],lastPend:null,cfg:{etiqueta:'',inicio:'',fin:''},nombre:'',u:null,rol:null,hoy:'',v:[],f:[],tipo:TIPOS[0][0],hist:[],hmod:'visitas',nr:null};
 $('#logo').src=$('#fav').href='data:image/png;base64,'+LOGO_B64;
 
 function toast(m,ms){const t=$('#toast');t.textContent=m;t.classList.add('show');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('show'),ms||2600)}
@@ -311,18 +361,18 @@ const val=n=>document.querySelector('input[name='+n+']:checked').value;
 /* ---------- Acceso ---------- */
 $('#l_ok').onclick=async()=>{
   S.u={u:$('#l_u').value.trim(),c:$('#l_c').value};
-  try{const j=await api('login');S.rol=j.rol;S.nombre=j.nombre||S.u.u;$('#quien').textContent='👤 '+S.nombre;$('#quien').hidden=false;$('#login').hidden=true;$('#app').hidden=false;$('#btnSalir').hidden=false;$('#tabHis').hidden=$('#tabNo').hidden=$('#tabPer').hidden=$('#tabAju').hidden=j.rol!=='admin';$('#l_c').value='';await cargar()}
+  try{const j=await api('login');S.rol=j.rol;S.nombre=j.nombre||S.u.u;$('#quien').textContent='👤 '+S.nombre;$('#quien').hidden=false;$('#login').hidden=true;$('#app').hidden=false;$('#btnSalir').hidden=false;$('#tabHis').hidden=$('#tabNo').hidden=$('#tabPer').hidden=$('#tabAju').hidden=j.rol!=='admin';document.querySelectorAll('.soloAdmin').forEach(e=>e.hidden=j.rol!=='admin');$('#btnAv').hidden=false;S.lastPend=null;$('#a_fecha').value=$('#a_fecha').min=S.hoy||isoL(new Date());$('#l_c').value='';await cargar()}
   catch(e){S.u=null;aviso('#l_err',e.message,'err')}
 };
 $('#l_c').onkeydown=e=>{if(e.key==='Enter')$('#l_ok').click()};
-$('#btnSalir').onclick=()=>{S.u=null;S.rol=null;$('#quien').hidden=true;$('#app').hidden=true;$('#login').hidden=false;$('#btnSalir').hidden=true;aviso('#l_err','')};
+$('#btnSalir').onclick=()=>{S.u=null;S.rol=null;$('#btnAv').hidden=true;$('#quien').hidden=true;$('#app').hidden=true;$('#login').hidden=false;$('#btnSalir').hidden=true;aviso('#l_err','')};
 document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));$('#pVis').hidden=b.dataset.tab!=='vis';$('#pFun').hidden=b.dataset.tab!=='fun';$('#pHis').hidden=b.dataset.tab!=='his';$('#pNo').hidden=b.dataset.tab!=='no';$('#pPer').hidden=b.dataset.tab!=='per';$('#pAju').hidden=b.dataset.tab!=='aju';if(b.dataset.tab==='no')cargarNo();if(b.dataset.tab==='per')cargarPer();if(b.dataset.tab==='aju')cargarAju()});
 
 async function cargar(){
   if(!S.u)return;
-  try{const j=await api('listar');S.hoy=j.hoy;S.v=j.visitas;S.f=j.funcionarios;S.cfg=j.config||S.cfg;cfgListo();render()}catch(e){toast(e.message,5000)}
+  try{const j=await api('listar');S.hoy=j.hoy;S.v=j.visitas;S.f=j.funcionarios;S.aut=j.autorizaciones||[];S.notifs=j.notifs||[];S.cfg=j.config||S.cfg;cfgListo();render();renderAut();revisarAvisos()}catch(e){toast(e.message,5000)}
 }
-setInterval(()=>{if(S.u&&!document.hidden)cargar()},60000);
+setInterval(()=>{if(S.u&&!document.hidden)cargar()},30000);
 
 /* ---------- Formulario de visitantes ---------- */
 $('#tipos').innerHTML=TIPOS.map(t=>`<button type="button" class="tipo" data-t="${t[0]}"><span style="font-size:24px">${t[1]}</span><b>${t[0]}</b><small class="hint">${t[2]}</small></button>`).join('');
@@ -427,6 +477,9 @@ $('#app').addEventListener('click',async e=>{
     if(a==='fr'){await api('retornoFuncionario',{id});toast('Retorno registrado ✓');await cargar()}
     if(a==='fn'){S.nr=id;aviso('#nr_err','');$('#nr_o').value='';$('#mNR').hidden=false}
     if(a==='ed')abrirEd(id);
+    if(a==='aus'){aviso('#av_msg','');try{await api('salidaAutorizada',{id});toast('Salida registrada ✓');await cargar()}catch(er){aviso('#av_msg',er.message+'\n\nPuede enviar un aviso o solicitar una nueva autorización al administrador.','err');await cargar()}}
+    if(a==='aur'){const x=S.aut.find(z=>z.id===id);S.resId=id;$('#r_info').innerHTML='<b>'+esc(x.nombre)+'</b> · '+esc(x.motivo)+(x.detalle?' – '+esc(x.detalle):'')+'<br>Solicitado por '+esc(x.solicitadoPor);$('#r_desde').value=hhmm();['#r_hasta','#r_prev','#r_obs'].forEach(i=>$(i).value='');document.querySelector('input[name=rret][value=Sí]').click();aviso('#r_err','');$('#mRes').hidden=false}
+    if(a==='aan'&&await confirmar('¿Anular esta autorización de salida?')){await api('autAnular',{id});toast('Autorización anulada');await cargar()}
     if(a==='pged'){const r=S.per.find(x=>x.id===id);S.pgEd=id;$('#pg_nom').value=r.nombre;$('#pg_ced').value=r.cedula;$('#pg_car').value=r.cargo;$('#pg_t').textContent='Editar funcionario';$('#pg_x').hidden=false;$('#pg_nom').scrollIntoView({behavior:'smooth',block:'center'})}
     if(a==='pgdel'&&await confirmar('¿Eliminar a este funcionario del directorio? (No borra sus salidas registradas.)')){await api('personalEliminar',{id});toast('Funcionario eliminado');await cargarPer()}
     if(a==='opged'){const r=S.ops.find(x=>x.id===id);S.opEd=id;$('#op_nom').value=r.nombre;$('#op_ced').value=r.cedula;$('#op_usu').value=r.usuario;$('#op_cla').value='';$('#op_t').textContent='Editar operador';$('#op_req').hidden=true;$('#op_hint').textContent='(déjela vacía para no cambiarla)';$('#op_x').hidden=false;$('#op_nom').scrollIntoView({behavior:'smooth',block:'center'})}
@@ -576,6 +629,104 @@ $('#op_ok').onclick=async()=>{
   try{await api('opGuardar',{id:S.opEd,nombre:$('#op_nom').value,cedula:$('#op_ced').value.trim(),opUsuario:$('#op_usu').value,opClave:$('#op_cla').value,activo:cur?cur.activo:'Sí'});limpiarOp();toast('Operador guardado ✓');await cargarAju()}
   catch(e){aviso('#op_msg',e.message,'err')}
 };
+
+
+/* ---------- Autorizaciones de salida de funcionarios ---------- */
+const hhmm=()=>{const n=new Date();return p2(n.getHours())+':'+p2(n.getMinutes())};
+function ventana(a){
+  if(a.fecha!==S.hoy)return{t:'Para el '+fmt(a.fecha),k:'am',ok:false};
+  const h=hhmm();
+  if(h<a.desde)return{t:'Desde las '+a.desde,k:'am',ok:false};
+  if(a.hasta&&h>a.hasta)return{t:'Venció a las '+a.hasta,k:'no',ok:false};
+  return{t:'✅ Puede salir ahora',k:'si',ok:true};
+}
+function chipsAut(a){return `<span class="chip am">${esc(a.motivo)}${a.detalle?' – '+esc(a.detalle):''}</span><span class="chip">🕒 ${esc(a.desde)}${a.hasta?' a '+esc(a.hasta):' en adelante'}</span>${a.retorna==='No'?`<span class="chip no">No retorna${a.obs?': '+esc(a.obs):''}</span>`:(a.retornoPrevisto?`<span class="chip">Retorno previsto ${esc(a.retornoPrevisto)}</span>`:'')}${a.autorizadoPor?`<span class="chip">Autoriza: ${esc(a.autorizadoPor)}</span>`:''}`}
+function renderAut(){
+  const q=($('#av_q').value||'').toLowerCase().trim();
+  const hoy=S.aut.filter(a=>a.fecha===S.hoy&&['Autorizada','Solicitada','Negada'].includes(a.estado)&&(!q||(a.nombre+' '+a.cedula).toLowerCase().includes(q)));
+  $('#avList').innerHTML=hoy.length?hoy.map(a=>{
+    if(a.estado==='Solicitada')return `<div class="sol ret"><div class="cab"><span>${esc(a.nombre)}</span><span class="chip am">⏳ Esperando al administrador</span></div><div class="chips"><span class="chip am">${esc(a.motivo)}${a.detalle?' – '+esc(a.detalle):''}</span></div></div>`;
+    if(a.estado==='Negada')return `<div class="sol out"><div class="cab"><span>${esc(a.nombre)}</span><span class="chip no">⛔ Salida NO autorizada</span></div><div class="hint">${esc(a.obs)||'El administrador no autorizó la salida.'}</div></div>`;
+    const w=ventana(a);
+    return `<div class="sol ${w.ok?'':'ret'}"><div class="cab"><span>${esc(a.nombre)}</span><span class="chip ${w.k}">${w.t}</span></div><div class="chips">${a.cedula?`<span class="chip">C.I. ${esc(a.cedula)}</span>`:''}${a.cargo?`<span class="chip">${esc(a.cargo)}</span>`:''}${chipsAut(a)}</div><div class="acc"><button class="ok" data-a="aus" data-id="${a.id}" ${w.ok?'':'disabled style="opacity:.5"'}>Verificar y registrar SALIDA</button></div></div>`}).join('')
+   :(q?'<div class="alertaNo">⛔ Este funcionario NO tiene autorización de salida para hoy</div><div class="hint">Si necesita salir, solicite la autorización al administrador.</div>':'<div class="hint">No hay autorizaciones de salida para hoy.</div>');
+  if(S.rol==='admin'){
+    const l=S.aut.filter(a=>a.estado==='Solicitada'||a.estado==='Autorizada').sort((x,y)=>(x.estado==='Solicitada'?0:1)-(y.estado==='Solicitada'?0:1)||(x.fecha+x.desde).localeCompare(y.fecha+y.desde));
+    $('#auN').textContent=l.length;
+    $('#auList').innerHTML=l.length?l.map(a=>`<div class="sol ${a.estado==='Solicitada'?'ret':''}"><div class="cab"><span>${esc(a.nombre)}</span><span class="chip ${a.estado==='Solicitada'?'am':'si'}">${a.estado==='Solicitada'?'⏳ Solicitud de '+esc(a.solicitadoPor):'Autorizada · '+fmt(a.fecha)}</span></div><div class="chips">${chipsAut(a)}</div><div class="acc">${a.estado==='Solicitada'?`<button class="ok" data-a="aur" data-id="${a.id}">Autorizar / Negar</button>`:`<button class="del" data-a="aan" data-id="${a.id}">Anular</button>`}</div></div>`).join(''):'<div class="hint">No hay solicitudes ni autorizaciones pendientes.</div>';
+  }
+}
+$('#av_q').addEventListener('input',renderAut);
+setInterval(()=>{if(S.u&&!$('#pFun').hidden)renderAut()},30000);   // refresca el estado «puede salir ahora»
+radios('#a_ret');radios('#r_ret');
+document.querySelectorAll('input[name=aret]').forEach(r=>r.onchange=()=>{$('#a_obsBox').hidden=val('aret')!=='No'});
+let tAb;
+$('#a_busca').addEventListener('input',()=>{clearTimeout(tAb);const q=$('#a_busca').value.trim();if(q.length<2){$('#a_res').innerHTML='';return}
+  tAb=setTimeout(async()=>{try{const j=await api('buscarFuncionarios',{q});S.ares=j.personal;
+    $('#a_res').innerHTML=j.personal.length?j.personal.map((p,i)=>`<button type="button" class="pers" data-i="${i}">✔ <b>${esc(p.nombre)}</b>${p.cedula?' · C.I. '+esc(p.cedula):''}${p.cargo?' · '+esc(p.cargo):''}</button>`).join(''):'<div class="hint">No está registrado: escriba sus datos y quedará guardado.</div>'}catch(e){}},350)});
+$('#a_res').onclick=e=>{const b=e.target.closest('[data-i]');if(!b)return;const p=S.ares[+b.dataset.i];$('#a_nom').value=p.nombre;$('#a_ced').value=p.cedula||'';$('#a_cargo').value=p.cargo||'';$('#a_res').innerHTML='';$('#a_busca').value='';$('#a_desde').value=$('#a_desde').value||hhmm()};
+$('#a_ok').onclick=async()=>{
+  const g=i=>$(i).value.trim(),ret=val('aret');let er='';
+  if(!g('#a_nom'))er='Escriba el nombre del funcionario.';else if(!g('#a_desde'))er='Indique desde qué hora puede salir.';
+  else if($('#a_mot').value==='Otro'&&!g('#a_det'))er='Describa el motivo de la salida.';else if(ret==='No'&&!g('#a_obs'))er='Indique por qué no retorna.';
+  if(er){aviso('#a_msg',er,'err');return}
+  const b=$('#a_ok');b.disabled=true;
+  try{await api('autCrear',{nombre:g('#a_nom'),cedula:g('#a_ced'),cargo:g('#a_cargo'),motivo:$('#a_mot').value,detalle:g('#a_det'),fecha:$('#a_fecha').value,desde:$('#a_desde').value,hasta:$('#a_hasta').value,retornoPrevisto:$('#a_prev').value,retorna:ret,obs:g('#a_obs')});
+    ['#a_nom','#a_ced','#a_cargo','#a_det','#a_desde','#a_hasta','#a_prev','#a_obs'].forEach(i=>$(i).value='');document.querySelector('input[name=aret][value=Sí]').click();
+    aviso('#a_msg','Salida autorizada ✓','ok');toast('Salida autorizada ✓');await cargar()}
+  catch(e){aviso('#a_msg',e.message,'err')}
+  b.disabled=false;
+};
+// Solicitud del operador
+$('#av_sol').onclick=()=>{$('#s_nom').value=$('#av_q').value.trim();['#s_ced','#s_cargo','#s_det'].forEach(i=>$(i).value='');aviso('#s_err','');$('#mSol').hidden=false;$('#s_nom').focus()};
+$('#s_x').onclick=()=>$('#mSol').hidden=true;
+$('#s_ok').onclick=async()=>{
+  try{await api('autSolicitar',{nombre:$('#s_nom').value,cedula:$('#s_ced').value,cargo:$('#s_cargo').value,motivo:$('#s_mot').value,detalle:$('#s_det').value});$('#mSol').hidden=true;toast('Solicitud enviada al administrador ✓',4000);await cargar()}
+  catch(e){aviso('#s_err',e.message,'err')}
+};
+// Resolver (administrador)
+$('#r_x').onclick=()=>$('#mRes').hidden=true;
+document.querySelectorAll('input[name=rret]').forEach(()=>{});
+async function resolver(dec){
+  const d={id:S.resId,decision:dec,desde:$('#r_desde').value,hasta:$('#r_hasta').value,retornoPrevisto:$('#r_prev').value,retorna:val('rret'),obs:$('#r_obs').value};
+  try{await api('autResolver',d);$('#mRes').hidden=true;toast(dec==='Negar'?'Solicitud negada':'Salida autorizada ✓');await cargar()}catch(e){aviso('#r_err',e.message,'err')}
+}
+$('#r_ok').onclick=()=>resolver('Autorizar');$('#r_neg').onclick=()=>resolver('Negar');
+
+/* ---------- Avisos al administrador ---------- */
+function beep(){try{const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);o.frequency.value=880;g.gain.value=.15;o.start();o.stop(c.currentTime+.25)}catch(e){}}
+function avisoNuevo(t,b){
+  toast('🔔 '+t+': '+b,7000);beep();try{navigator.vibrate&&navigator.vibrate([200,100,200])}catch(e){}
+  if(window.Notification&&Notification.permission==='granted'){
+    const o={body:b,icon:'icons/icon-192.png',tag:'aviso'};
+    if(navigator.serviceWorker&&navigator.serviceWorker.ready)navigator.serviceWorker.ready.then(r=>r.showNotification(t,o)).catch(()=>{try{new Notification(t,o)}catch(e){}});else try{new Notification(t,o)}catch(e){}
+  }
+}
+function revisarAvisos(){
+  const pend=S.notifs.filter(n=>n.estado==='Pendiente');
+  if(S.rol==='admin'){
+    $('#avT').textContent='Avisos'+(pend.length?' ('+pend.length+')':'');
+    if(S.lastPend!==null&&pend.length>S.lastPend)avisoNuevo(pend[0].tipo+' · '+pend[0].de,pend[0].mensaje);
+    S.lastPend=pend.length;
+  }else $('#avT').textContent='Avisar';
+  if(!$('#mAv').hidden)renderAvisos();
+}
+function renderAvisos(){
+  const adm=S.rol==='admin';
+  $('#av_op').hidden=adm;$('#av_adm').hidden=!adm;$('#av_t').textContent=adm?'Avisos recibidos':'Avisar al administrador';$('#av_lt').textContent=adm?'Bandeja':'Mis avisos enviados';
+  $('#avList2').innerHTML=S.notifs.length?S.notifs.map(n=>`<div class="sol ${n.estado==='Pendiente'?'ret':'out'}"><div class="cab"><span>${esc(n.tipo)}${adm?' · '+esc(n.de):''}</span><span>${esc(fmt(n.fecha))} ${esc(n.hora)}</span></div><div class="det" style="font-size:13px;margin:4px 0;white-space:pre-line">${esc(n.mensaje)}</div><div class="chips"><span class="chip ${n.estado==='Pendiente'?'am':'si'}">${n.estado==='Pendiente'?'Pendiente':'Atendido'+(n.atendidaPor?' por '+esc(n.atendidaPor):'')}</span>${n.respuesta?`<span class="chip">${esc(n.respuesta)}</span>`:''}</div>${adm&&n.estado==='Pendiente'?`<div class="field" style="margin:6px 0 0"><input class="rsp" data-id="${n.id}" placeholder="Respuesta (opcional)"></div><div class="acc"><button class="ok" data-a="avat" data-id="${n.id}">Marcar como atendido</button></div>`:''}</div>`).join(''):'<div class="hint">No hay avisos.</div>';
+}
+$('#btnAv').onclick=()=>{aviso('#avn_err','');renderAvisos();$('#mAv').hidden=false};
+$('#avc_x').onclick=()=>$('#mAv').hidden=true;
+$('#avn_ok').onclick=async()=>{
+  try{await api('notificar',{tipo:$('#avn_tipo').value,mensaje:$('#avn_msg').value});$('#avn_msg').value='';aviso('#avn_err','Aviso enviado al administrador ✓','ok');await cargar()}
+  catch(e){aviso('#avn_err',e.message,'err')}
+};
+$('#av_perm').onclick=async()=>{if(!window.Notification){toast('Este navegador no admite avisos');return}const p=await Notification.requestPermission();toast(p==='granted'?'Avisos del navegador activados ✓':'Permiso no concedido')};
+$('#mAv').addEventListener('click',async e=>{
+  const b=e.target.closest('[data-a=avat]');if(!b)return;const inp=document.querySelector('.rsp[data-id="'+b.dataset.id+'"]');
+  try{await api('notifAtender',{id:b.dataset.id,respuesta:inp?inp.value:''});toast('Aviso atendido ✓');await cargar()}catch(er){toast(er.message,5000)}
+});
 
 /* ---------- App instalable (PWA) ---------- */
 let pwaEv=null;
