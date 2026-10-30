@@ -114,7 +114,7 @@ function manejar_(d){
     })};
   }
   if (a === 'verificar'){   // ¿está en la lista de personas no autorizadas?
-    var rv = restringido_(String(d.cedula||'').trim(), d.nombre);
+    var cv = String(d.cedula||'').trim(), rv = restringido_(cv, d.nombre) || (/^\d{9}$/.test(cv) ? restringido_('0' + cv, d.nombre) : null);
     return {ok:true, bloqueado:!!rv, razon:rv?rv.razon:'', nombre:rv?rv.nombre:''};
   }
 
@@ -133,7 +133,12 @@ function manejar_(d){
     var ced = String(d.cedula||'').trim(), nom = String(d.nombre||'').trim();
     if (TIPOS.indexOf(d.tipo) < 0) throw new Error('Seleccione el tipo de persona.');
     if (!nom) throw new Error('Escriba el nombre completo.');
-    if (d.tipoDoc === 'Cédula'){ if (!cedulaOk_(ced)) throw new Error('La cédula no es válida. Revise los 10 dígitos.'); }
+    ced = normCed_(ced, d.tipoDoc);
+    if (d.tipoDoc === 'Cédula'){
+      if (!/^\d{10}$/.test(ced)) throw new Error('La cédula debe tener 10 números.');
+      // Si el dígito verificador no coincide, solo se acepta cuando el operador confirmó el número con el documento físico
+      if (!cedulaOk_(ced) && d.cedulaConfirmada !== true) throw new Error('El número no pasa la verificación de la cédula (dígito verificador). Revise que esté bien escrito o confírmelo con el documento físico.');
+    }
     else if (!/^[A-Za-z0-9\-]{5,20}$/.test(ced)) throw new Error('Documento no válido.');
     // Lista de personas no autorizadas: se bloquea por documento o por nombre
     var rb = restringido_(ced, nom);
@@ -297,7 +302,8 @@ function manejar_(d){
   if (a === 'opGuardar'){
     var on = String(d.nombre||'').trim(), oc = String(d.cedula||'').trim(), ou = String(d.opUsuario||'').trim(), ok_ = String(d.opClave||'');   // (usuario/clave son las credenciales de quien envía)
     if (!on) throw new Error('Escriba el nombre completo.');
-    if (!cedulaOk_(oc)) throw new Error('La cédula del operador no es válida.');
+    oc = normCed_(oc, 'Cédula');
+    if (!/^\d{10}$/.test(oc)) throw new Error('La cédula del operador debe tener 10 números.');
     if (!/^[A-Za-z0-9._-]{3,20}$/.test(ou)) throw new Error('Usuario: 3 a 20 letras, números, punto, guion o guion bajo (sin espacios).');
     var reservado = Object.keys(USUARIOS).some(function(k){ return k.toLowerCase() === ou.toLowerCase(); });
     var ops = leer_(HOJA_O,K_O,T_O);
@@ -321,7 +327,8 @@ function manejar_(d){
   if (a === 'personalGuardar'){
     var pn = String(d.nombre||'').trim(), pc = String(d.cedula||'').trim(), pg = String(d.cargo||'').trim();
     if (!pn) throw new Error('Escriba el nombre del funcionario.');
-    if (pc && !cedulaOk_(pc)) throw new Error('La cédula no es válida.');
+    pc = normCed_(pc, 'Cédula');
+    if (pc && !/^\d{10}$/.test(pc)) throw new Error('La cédula debe tener 10 números.');
     var lp = leer_(HOJA_PF,K_PF,T_PF);
     if (pc && lp.some(function(r){ return r.cedula === pc && r.id !== d.id; })) throw new Error('Ya existe un funcionario con esa cédula.');
     if (d.id){ var xp = buscar_(HOJA_PF,K_PF,T_PF,d.id); xp.reg.nombre = pn; xp.reg.cedula = pc; xp.reg.cargo = pg; xp.reg.activo = d.activo === 'No' ? 'No' : 'Sí'; guardar_(HOJA_PF,K_PF,T_PF,xp); }
@@ -405,6 +412,7 @@ function manejar_(d){
 }
 
 /* ---------- Utilidades ---------- */
+function normCed_(c, tipoDoc){ c = String(c||'').replace(/[\s.\-]/g,''); return (tipoDoc === 'Cédula' && /^\d{9}$/.test(c)) ? '0' + c : c; }
 function cedulaOk_(c){
   if (!/^\d{10}$/.test(c)) return false;
   var prov = parseInt(c.substr(0,2),10);

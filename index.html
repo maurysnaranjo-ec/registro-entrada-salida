@@ -129,6 +129,7 @@ h2.t{font:700 13px Poppins,sans-serif;text-transform:uppercase;letter-spacing:.8
           <div class="field"><label>Tipo de documento</label><select id="v_tdoc"><option>Cédula</option><option>Pasaporte u otro</option></select></div>
           <div class="field"><label>Número de documento <span class="req">*</span></label><input id="v_ced" inputmode="numeric" maxlength="20" placeholder="Ej. 0601234567"></div>
         </div>
+        <div class="box" id="v_cedBox" hidden><label style="display:flex;gap:8px;align-items:flex-start;font-weight:600;font-size:13px;margin:0"><input type="checkbox" id="v_cedOk" style="width:auto;margin-top:3px"> Comparé el número con el documento físico y confirmo que es correcto</label></div>
         <div class="field"><label>Nombre completo <span class="req">*</span></label><input id="v_nom" placeholder="Apellidos y nombres"></div>
         <div class="g2">
           <div class="field"><label>Celular <span style="font-weight:500;color:var(--muted)">(opcional)</span></label><input id="v_cel" type="tel"></div>
@@ -351,6 +352,7 @@ async function api(accion,datos={}){
   let r;try{r=await fetch(WEBAPP_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({accion,usuario:S.u&&S.u.u,clave:S.u&&S.u.c},datos))})}catch(e){throw new Error('No se pudo conectar con el servidor. Revise su conexión a internet.')}
   let j;try{j=await r.json()}catch(e){throw new Error('Respuesta inválida del servidor. Revise la URL de implementación.')}if(!j.ok)throw new Error(j.error||'Error en el servidor');return j;
 }
+const normCed=(c,t)=>{c=String(c).replace(/[\s.\-]/g,'');return t==='Cédula'&&/^\d{9}$/.test(c)?'0'+c:c};   // si falta el cero inicial, se agrega
 function cedulaOk(c){
   if(!/^\d{10}$/.test(c))return false;const p=+c.slice(0,2);if(!((p>=1&&p<=24)||p===30)||+c[2]>5)return false;
   let s=0;for(let i=0;i<9;i++){let n=+c[i]*(i%2?1:2);if(n>9)n-=9;s+=n}return (10-s%10)%10===+c[9];
@@ -404,7 +406,7 @@ S.bloq=null;
 function alertaBloq(b){S.bloq=b;const a=$('#v_alerta');a.hidden=!b;if(b)a.innerHTML='⛔ Persona no autorizada — no puede ingresar<br><span style="font-weight:500;text-transform:none">'+esc(b.nombre||'')+(b.nombre?' · ':'')+'Razón: '+esc(b.razon)+'</span>';$('#v_ok').disabled=!!b}
 let tVer,tBus;
 function verificarForm(){clearTimeout(tVer);tVer=setTimeout(async()=>{
-  const c=$('#v_ced').value.trim(),n=$('#v_nom').value.trim();
+  const c=normCed($('#v_ced').value,$('#v_tdoc').value),n=$('#v_nom').value.trim();
   if(!c&&n.split(/\s+/).length<2){alertaBloq(null);return}
   try{const j=await api('verificar',{cedula:c,nombre:n});alertaBloq(j.bloqueado?{nombre:j.nombre,razon:j.razon}:null)}catch(e){}
 },500)}
@@ -417,13 +419,16 @@ $('#v_res').onclick=e=>{const b=e.target.closest('[data-i]');if(!b)return;const 
   S.tipo=p.tipo;marcarTipo();$('#v_tdoc').value=p.tipoDoc;$('#v_ced').value=p.id;$('#v_nom').value=p.nombre;$('#v_cel').value=p.celular||'';$('#v_ent').value=p.entidad||'';
   $('#v_res').innerHTML='';$('#v_busca').value='';alertaBloq(p.bloqueado?{nombre:p.nombre,razon:p.razon}:null);
   toast(p.bloqueado?'⛔ Persona no autorizada':'Persona registrada seleccionada ✓');if(!p.bloqueado)$('#v_dep').focus()};
+$('#v_ced').addEventListener('input',()=>{$('#v_cedOk').checked=false;$('#v_cedBox').hidden=true});
+$('#v_ced').addEventListener('blur',()=>{$('#v_ced').value=normCed($('#v_ced').value,$('#v_tdoc').value)});
 $('#v_ok').onclick=async()=>{
-  const g=id=>$(id).value.trim(),tdoc=$('#v_tdoc').value,ced=g('#v_ced'),ret=val('vret'),dep=$('#v_dep').value==='Otra'?g('#v_depO'):$('#v_dep').value;
+  const g=id=>$(id).value.trim(),tdoc=$('#v_tdoc').value,ced=normCed($('#v_ced').value,tdoc),ret=val('vret'),dep=$('#v_dep').value==='Otra'?g('#v_depO'):$('#v_dep').value;
   let er='';
   const ests=[...document.querySelectorAll('#v_ests .est')].map(e=>({nombre:e.querySelector('.e-nom').value.trim(),curso:e.querySelector('.e-cur').value,paralelo:e.querySelector('.e-par').value}));
   if(S.bloq)er='⛔ Esta persona no está autorizada a ingresar.';
   else if(!ced)er='Escriba el número de documento.';
-  else if(tdoc==='Cédula'&&!cedulaOk(ced))er='La cédula no es válida. Revise los 10 dígitos (o cambie el tipo de documento).';
+  else if(tdoc==='Cédula'&&!/^\d{10}$/.test(ced))er='La cédula debe tener 10 números (use «Pasaporte u otro» para otros documentos).';
+  else if(tdoc==='Cédula'&&!cedulaOk(ced)&&!$('#v_cedOk').checked){$('#v_cedBox').hidden=false;er='El número no pasa la verificación automática de la cédula (dígito verificador). Revise que esté bien escrito. Si ya lo comparó con el documento físico y es correcto, marque la casilla de confirmación y registre de nuevo.'}
   else if(!g('#v_nom'))er='Escriba el nombre completo.';
   else if(S.tipo==='Persona externa'&&!g('#v_ent'))er='Escriba la entidad o institución que representa.';
   else if(!dep)er='Indique la dependencia a la que se dirige.';
@@ -432,8 +437,8 @@ $('#v_ok').onclick=async()=>{
   if(er){aviso('#v_msg',er,'err');return}
   const b=$('#v_ok');b.disabled=true;
   try{
-    await api('ingreso',{tipo:S.tipo,tipoDoc:tdoc,cedula:ced,nombre:g('#v_nom'),celular:g('#v_cel'),entidad:g('#v_ent'),dependencia:dep,visita:g('#v_vis'),asunto:g('#v_asu'),retira:ret,estudiantes:ret==='Sí'?ests:[],motivoRetiro:$('#v_mret').value,autorizaRetiro:g('#v_aret')});
-    ['#v_ced','#v_nom','#v_cel','#v_ent','#v_depO','#v_vis','#v_asu','#v_aret','#v_busca'].forEach(i=>$(i).value='');$('#v_ests').innerHTML='';addEst();$('#v_res').innerHTML='';
+    await api('ingreso',{tipo:S.tipo,tipoDoc:tdoc,cedula:ced,cedulaConfirmada:$('#v_cedOk').checked,nombre:g('#v_nom'),celular:g('#v_cel'),entidad:g('#v_ent'),dependencia:dep,visita:g('#v_vis'),asunto:g('#v_asu'),retira:ret,estudiantes:ret==='Sí'?ests:[],motivoRetiro:$('#v_mret').value,autorizaRetiro:g('#v_aret')});
+    ['#v_ced','#v_nom','#v_cel','#v_ent','#v_depO','#v_vis','#v_asu','#v_aret','#v_busca'].forEach(i=>$(i).value='');$('#v_ests').innerHTML='';addEst();$('#v_res').innerHTML='';$('#v_cedOk').checked=false;$('#v_cedBox').hidden=true;
     $('#v_dep').selectedIndex=0;$('#v_dep').onchange();document.querySelector('input[name=vret][value=No]').click();
     aviso('#v_msg','Entrada registrada ✓','ok');toast('Entrada registrada ✓');await cargar();
   }catch(e){aviso('#v_msg',e.message,'err')}
